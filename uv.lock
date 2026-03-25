@@ -679,6 +679,7 @@ dependencies = [
     { name = "praw" },
     { name = "pyarrow" },
     { name = "python-dotenv" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -689,6 +690,7 @@ requires-dist = [
     { name = "praw", specifier = ">=7.8.1" },
     { name = "pyarrow", specifier = ">=23.0.1" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "requests", specifier = ">=2.32.5" },
 ]
 
 [[package]]
