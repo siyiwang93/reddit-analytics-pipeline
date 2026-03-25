@@ -1,18 +1,38 @@
-# Reddit Analytics Pipeline
+#Analytics Pipeline
 
-A data engineering portfolio project that collects and analyzes Reddit data using Apache Spark, Apache Kafka, dbt, and Google BigQuery.
+A data engineering portfolio project that builds end-to-end batch 
+and streaming data pipelines to analyze large-scale event data.
 
-## Overview
-This project builds batch and streaming data pipelines to analyze trending topics, engagement patterns, and community activity across selected subreddits.
+## Current Dataset
+GitHub Archive — millions of GitHub events (stars, commits, PRs, issues)
 
 ## Tech Stack
-- **Ingestion**: Python (PRAW - Reddit API)
-- **Processing**: Apache Spark (PySpark)
-- **Streaming**: Apache Kafka
+- **Ingestion**: Python
+- **Data Lake**: Google Cloud Storage
+- **Batch Processing**: Apache Spark (PySpark)
+- **Stream Processing**: Apache Kafka + PyFlink
 - **Transformation**: dbt
 - **Warehouse**: Google BigQuery
 - **Orchestration**: Apache Airflow
 - **Visualization**: Tableau
+
+## Architecture
+```
+GitHub Archive (external)
+    ↓ Python ingestion
+GCS (data lake)
+    ↓ PySpark transformation
+BigQuery (warehouse)
+    ↓ dbt models
+    ↓ Airflow orchestration
+    ↓ Tableau dashboard
+
+Streaming:
+GitHub Archive (hourly)
+    ↓ Kafka producer
+    ↓ PyFlink processing
+    ↓ BigQuery (real-time)
+```
 
 ## Status
 🚧 In Development
