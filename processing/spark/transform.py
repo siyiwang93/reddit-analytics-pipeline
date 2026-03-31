@@ -2,13 +2,12 @@ import os
 from dotenv import load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    col, to_timestamp, date_format,to_date,
+    col, to_timestamp,to_date,
     hour, dayofweek, dayofmonth, month, year,
-    when, split, get_json_object
+    when, split
 )
-
 from datetime import datetime, timedelta
-from pyspark.sql.types import IntegerType, BooleanType
+
 
 load_dotenv()
 
@@ -16,33 +15,16 @@ GCS_BUCKET = os.getenv('GCS_BUCKET_NAME')
 GCP_PROJECT = os.getenv('GCP_PROJECT_ID')
 BIGQUERY_DATASET = os.getenv('BIGQUERY_DATASET')
 
-def get_shuffle_partitions(data_size_gb_compressed):
-    """
-    Calculate optimal shuffle partitions based on data size
-    Rule: uncompressed size / 128MB
-    json.gz expands ~5x when uncompressed
-    """
-    uncompressed_gb = data_size_gb_compressed * 5
-    uncompressed_mb = uncompressed_gb * 1024
-    partitions = int(uncompressed_mb / 128)
-    # Minimum 200, maximum 5000
-    return max(200, min(partitions, 5000))
 
-"""
-shuffle_partitions: set based on data size
-    1 day   (~2.1GB compressed)  → 200
-    1 week  (~15GB compressed)   → 600
-    1 month (~66GB compressed)   → 2000
-"""
-
-def create_spark_session(shuffle_partitions=200):
-    print(f"⚙️  Creating Spark session with {shuffle_partitions} shuffle partitions")
+def create_spark_session():
+    #print(f"⚙️  Creating Spark session with {shuffle_partitions} shuffle partitions")
 
     # Path to application default credentials
     credentials_path = os.path.expanduser(
         "~/.config/gcloud/application_default_credentials.json"
     )
     #print(f"🔑 Using credentials: {credentials_path}")
+
     java_opts = (
     "--add-opens java.base/sun.nio.ch=ALL-UNNAMED "
     "--add-opens java.base/java.nio=ALL-UNNAMED "
@@ -89,6 +71,7 @@ def read_raw_data(spark, date_str):
 
     df = spark.read.json(gcs_path)
 
+    #print(f"📊 Total rows: {df.count():,}") # ← this forces a full data scan
     print(f"📊 Execution partitions after reading: {df.rdd.getNumPartitions()}")
 
     return df
@@ -170,9 +153,9 @@ def transform_events(df):
 
 def filter_public_events(df):
     """Keep only public events"""
+    print("\n🔍 Filtering public events...")
     filtered = df.filter(col("is_public") == True)
     return filtered
-
 
 def save_to_gcs_parquet(df, date_str):
     """
@@ -190,9 +173,11 @@ def save_to_gcs_parquet(df, date_str):
 
     print(f"✅ Saved to: {output_path}")
 
-def save_to_bigquery(df, table_name, date_str):
+def save_to_bigquery(spark, table_name, date_str):
     full_table = f"{GCP_PROJECT}.{BIGQUERY_DATASET}.{table_name}"
-    print(f"\n💾 Saving to BigQuery: {full_table}")
+    parquet_path = f"gs://{GCS_BUCKET}/processed/github/{date_str}"
+    print(f"\n💾 Loading to BigQuery: {full_table}")
+    print(f"   Source: {parquet_path}")
 
     # Delete existing partition for this date before writing
     from google.cloud import bigquery
@@ -212,45 +197,31 @@ def save_to_bigquery(df, table_name, date_str):
     except NotFound:
         print(f"📋 Table does not exist yet, will be created on write")
 
+    df_parquet = spark.read.parquet(parquet_path)
 
-    df.write \
+    df_parquet.write \
         .format("bigquery") \
         .option("table", full_table) \
         .option("temporaryGcsBucket", GCS_BUCKET) \
         .option("partitionField", "event_date") \
         .option("clusteredFields", "event_type") \
+        .option("allowFieldAddition", "true") \
+        .option("allowFieldRelaxation", "true") \
         .mode("append") \
         .save()
 
-    print(f"✅ Saved to BigQuery: {full_table}")
+    print(f"✅ Loaded to BigQuery: {full_table}")
 
-def run_transformation(
-    date_str="2025-01-01",
-    data_size_gb=2.1):
-    """
-    Main transformation job
-
-    Args:
-        date_str: date to process e.g. "2025-01-01"
-        data_size_gb: compressed size in GB
-            1 day   = ~2.1GB
-            1 week  = ~15GB
-            1 month = ~66GB
-        save_to_bq: True = BigQuery, False = GCS parquet
-    """
-    print(f"🚀 Starting transformation for {date_str}")
-    print(f"📊 Estimated data size: {data_size_gb}GB compressed")
-
-    # Calculate shuffle partitions based on data size
-    shuffle_partitions = get_shuffle_partitions(data_size_gb)
-    print(f"⚙️  Calculated shuffle partitions: {shuffle_partitions}")
-
-    spark = create_spark_session(shuffle_partitions)
+def run_transformation(date_str):
+    spark = create_spark_session()
+    spark.sparkContext.setLogLevel("ERROR")  
+    print(f"\n{'='*50}")
+    print(f"📅 Processing: {date_str}")
+    print(f"{'='*50}")
 
     try:
         # Step 1 — Read
-        gcs_path = f"gs://{GCS_BUCKET}/raw/github/{date_str}/*.json.gz"
-        df = read_raw_data(spark, gcs_path)
+        df = read_raw_data(spark, date_str)
 
         # Step 2 — Transform
         transformed_df = transform_events(df)
@@ -261,21 +232,32 @@ def run_transformation(
         # Step 4: Save to GCS as parquet
         save_to_gcs_parquet(filtered_df, date_str)
 
-        # Step 5: Read back from parquet
-        parquet_path = f"gs://{GCS_BUCKET}/processed/github/{date_str}"
-        df_parquet = spark.read.parquet(parquet_path)
-
-        # Step 6: Load to BigQuery from parquet
-        save_to_bigquery(df_parquet, "github_events", date_str)
+        # Step 5: Load to BigQuery from parquet
+        save_to_bigquery(spark, "github_events", date_str)
         
         print(f"\n✅ Transformation complete for {date_str}!")
-
+        return True
+    except Exception as e:
+        print(f"❌ Failed: {date_str} — {str(e)}")
+        return False 
     finally:
         spark.stop()
 
 if __name__ == '__main__':
-    spark = create_spark_session(shuffle_partitions=200)
-    spark.sparkContext.setLogLevel("ERROR")  # ← suppress logs immediately
-    run_transformation()
+    start_date = datetime(2025, 1, 11)
+    end_date = datetime(2025, 1, 31)
+    failed_dates = []
 
-    spark.stop()
+    current_date = start_date
+    while current_date <= end_date:
+        date_str = current_date.strftime("%Y-%m-%d")
+        success = run_transformation(date_str)
+        if not success:
+            failed_dates.append(date_str)
+        current_date += timedelta(days=1)
+
+    total_dates = (end_date - start_date).days + 1
+    print(f"\n{'='*50}")
+    print(f"✅ Successful: {total_dates - len(failed_dates)}/{total_dates}")
+    if failed_dates:
+        print(f"❌ Failed dates: {failed_dates}")

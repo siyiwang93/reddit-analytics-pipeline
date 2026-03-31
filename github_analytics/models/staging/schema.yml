@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: stg_github_events
+    description: "Cleaned and flattened GitHub Archive events"
+    columns:
+      - name: event_id
+        description: "Unique event identifier"
+        tests:
+          - not_null
+          - unique:
+              config:
+                severity: warn  # ← warn, don't fail
+
+      - name: event_type
+        description: "Type of GitHub event"
+        tests:
+          - not_null
+          - accepted_values:
+              values: 
+                - PushEvent
+                - CreateEvent
+                - PullRequestEvent
+                - IssueCommentEvent
+                - WatchEvent
+                - DeleteEvent
+                - PullRequestReviewEvent
+                - IssuesEvent
+                - ReleaseEvent
+                - ForkEvent
+                - PullRequestReviewCommentEvent
+                - PublicEvent
+                - GollumEvent
+                - CommitCommentEvent
+                - MemberEvent
+
+      - name: event_date
+        tests:
+          - not_null
+
+      - name: actor_id
+        tests:
+          - not_null
+
+      - name: repo_id
+        tests:
+          - not_null

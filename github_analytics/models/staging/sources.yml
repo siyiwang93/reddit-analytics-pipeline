@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: github_analytics
+    project: reddit-analytic-pipeline
+    dataset: reddit_analytics
+    tables:
+      - name: github_events
+        description: "2025-01 Raw GitHub Archive events loaded from GCS parquet"
+        columns:
+          - name: event_id
+            tests:
+              - not_null
+          - name: event_type
+            tests:
+              - not_null
+          - name: event_date
+            tests:
+              - not_null

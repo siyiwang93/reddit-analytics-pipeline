@@ -1,0 +1,87 @@
+version: 2
+
+models:
+  - name: dim_actors
+    description: "Unique actors (users and bots)"
+    columns:
+      - name: actor_id
+        tests:
+          - not_null
+          - unique
+      - name: actor_login
+        tests:
+          - not_null
+
+  - name: dim_repos
+    description: "Unique repositories"
+    columns:
+      - name: repo_id
+        tests:
+          - not_null
+          - unique
+      - name: repo_name
+        tests:
+          - not_null
+
+  - name: fct_events
+    description: "Base fact table with all event types"
+    columns:
+      - name: event_id
+        tests:
+          - not_null
+          - unique
+      - name: event_type
+        tests:
+          - not_null
+      - name: event_date
+        tests:
+          - not_null
+      - name: actor_id
+        tests:
+          - not_null
+      - name: repo_id
+        tests:
+          - not_null
+
+  - name: fct_push_events
+    description: "Push events with commit details"
+    columns:
+      - name: event_id
+        tests:
+          - not_null
+          - unique
+      - name: push_size
+        tests:
+          - not_null
+
+  - name: fct_pr_events
+    description: "Pull request events"
+    columns:
+      - name: event_id
+        tests:
+          - not_null
+          - unique
+
+  - name: github_daily_activity
+    description: "Daily event counts by event type"
+    columns:
+      - name: event_date
+        tests:
+          - not_null
+      - name: event_type
+        tests:
+          - not_null
+      - name: total_events
+        tests:
+          - not_null
+
+  - name: github_repo_summary
+    description: "Per repository activity summary"
+    columns:
+      - name: repo_id
+        tests:
+          - not_null
+          - unique
+      - name: repo_name
+        tests:
+          - not_null
