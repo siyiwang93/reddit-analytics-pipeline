@@ -179,7 +179,7 @@ def save_to_gcs_parquet(df, date_str):
 
     print(f"✅ Saved to: {output_path}")
 
-def save_to_bigquery(spark, table_name, date_str, df):
+def save_to_bigquery(spark, table_name, date_str):
     full_table = f"{GCP_PROJECT}.{BIGQUERY_DATASET}.{table_name}"
     parquet_path = f"gs://{GCS_BUCKET}/processed/github/{date_str}"
     print(f"\n💾 Loading to BigQuery: {full_table}")
@@ -203,9 +203,20 @@ def save_to_bigquery(spark, table_name, date_str, df):
     except NotFound:
         print(f"📋 Table does not exist yet, will be created on write")
 
-    #df_parquet = spark.read.parquet(parquet_path)
+    df_parquet = spark.read.parquet(parquet_path)
 
-    # df_parquet.write \
+    df_parquet.write \
+         .format("bigquery") \
+         .option("table", full_table) \
+         .option("temporaryGcsBucket", GCS_BUCKET) \
+         .option("partitionField", "event_date") \
+         .option("clusteredFields", "event_type") \
+         .option("allowFieldAddition", "true") \
+         .option("allowFieldRelaxation", "true") \
+         .mode("append") \
+         .save()
+
+    # df.write \
     #     .format("bigquery") \
     #     .option("table", full_table) \
     #     .option("temporaryGcsBucket", GCS_BUCKET) \
@@ -215,17 +226,6 @@ def save_to_bigquery(spark, table_name, date_str, df):
     #     .option("allowFieldRelaxation", "true") \
     #     .mode("append") \
     #     .save()
-
-    df.write \
-        .format("bigquery") \
-        .option("table", full_table) \
-        .option("temporaryGcsBucket", GCS_BUCKET) \
-        .option("partitionField", "event_date") \
-        .option("clusteredFields", "event_type") \
-        .option("allowFieldAddition", "true") \
-        .option("allowFieldRelaxation", "true") \
-        .mode("append") \
-        .save()
 
     print(f"✅ Loaded to BigQuery: {full_table}")
 
@@ -247,10 +247,10 @@ def run_transformation(date_str):
         filtered_df = filter_public_events(transformed_df)
 
         # Step 4: Save to GCS as parquet
-        # save_to_gcs_parquet(filtered_df, date_str)
+        save_to_gcs_parquet(filtered_df, date_str)
 
         # Step 5: Load to BigQuery from parquet
-        save_to_bigquery(spark, "github_events", date_str, filtered_df)
+        save_to_bigquery(spark, "github_events", date_str)
         
         print(f"\n✅ Transformation complete for {date_str}!")
         return True
