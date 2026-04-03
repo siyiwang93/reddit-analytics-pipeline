@@ -1,0 +1,82 @@
+version: '3.8'
+
+x-airflow-common: &airflow-common
+  build: .
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: '1'    
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '1'   
+    AIRFLOW__WEBSERVER__CSRF_ENABLED: 'False'
+    AIRFLOW__WEBSERVER__BASE_URL: https://${CODESPACE_NAME}-8080.app.github.dev
+    GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/credentials/application_default_credentials.json
+    GOOGLE_CLOUD_PROJECT: reddit-analytic-pipeline    
+    GCS_BUCKET_NAME: ${GCS_BUCKET_NAME}
+    GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+    BIGQUERY_DATASET: ${BIGQUERY_DATASET}
+    JAVA_OPTS: "-Xmx4g -Xms2g"           
+    SPARK_DRIVER_MEMORY: "4g"            
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./jars:/opt/airflow/jars
+    - ../processing:/opt/airflow/processing
+    - ../ingestion:/opt/airflow/ingestion 
+    - ../github_analytics:/opt/airflow/github_analytics
+    - ~/.config/gcloud:/opt/airflow/credentials
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_db:/var/lib/postgresql/data  
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      retries: 5
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db init
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname Admin \
+          --role Admin \
+          --email admin@example.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_db:

@@ -20,8 +20,9 @@ def create_spark_session():
     #print(f"⚙️  Creating Spark session with {shuffle_partitions} shuffle partitions")
 
     # Path to application default credentials
-    credentials_path = os.path.expanduser(
-        "~/.config/gcloud/application_default_credentials.json"
+    credentials_path = os.getenv(
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
     )
     #print(f"🔑 Using credentials: {credentials_path}")
 
@@ -41,8 +42,8 @@ def create_spark_session():
 
         # GCS connector
         .config("spark.jars",
-                "/home/codespace/gcs-connector-hadoop3-latest.jar,"
-                "/home/codespace/spark-bigquery-with-dependencies_2.12-0.36.1.jar")
+                "/opt/airflow/jars/gcs-connector-hadoop3-latest.jar,"
+                "/opt/airflow/jars/spark-bigquery-with-dependencies_2.12-0.36.1.jar")
         .config("spark.hadoop.fs.gs.impl",
                 "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
         .config("spark.hadoop.fs.AbstractFileSystem.gs.impl",
@@ -58,6 +59,11 @@ def create_spark_session():
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         .config("spark.sql.adaptive.skewJoin.enabled", "true")
+
+        .config("spark.driver.memory", "4g")
+        .config("spark.executor.memory", "4g")
+        .config("spark.driver.maxResultSize", "2g")
+        .config("spark.shutdown.hooks.enabled", "false")
 
         .getOrCreate()
     )
@@ -173,7 +179,7 @@ def save_to_gcs_parquet(df, date_str):
 
     print(f"✅ Saved to: {output_path}")
 
-def save_to_bigquery(spark, table_name, date_str):
+def save_to_bigquery(spark, table_name, date_str, df):
     full_table = f"{GCP_PROJECT}.{BIGQUERY_DATASET}.{table_name}"
     parquet_path = f"gs://{GCS_BUCKET}/processed/github/{date_str}"
     print(f"\n💾 Loading to BigQuery: {full_table}")
@@ -197,9 +203,20 @@ def save_to_bigquery(spark, table_name, date_str):
     except NotFound:
         print(f"📋 Table does not exist yet, will be created on write")
 
-    df_parquet = spark.read.parquet(parquet_path)
+    #df_parquet = spark.read.parquet(parquet_path)
 
-    df_parquet.write \
+    # df_parquet.write \
+    #     .format("bigquery") \
+    #     .option("table", full_table) \
+    #     .option("temporaryGcsBucket", GCS_BUCKET) \
+    #     .option("partitionField", "event_date") \
+    #     .option("clusteredFields", "event_type") \
+    #     .option("allowFieldAddition", "true") \
+    #     .option("allowFieldRelaxation", "true") \
+    #     .mode("append") \
+    #     .save()
+
+    df.write \
         .format("bigquery") \
         .option("table", full_table) \
         .option("temporaryGcsBucket", GCS_BUCKET) \
@@ -230,10 +247,10 @@ def run_transformation(date_str):
         filtered_df = filter_public_events(transformed_df)
 
         # Step 4: Save to GCS as parquet
-        save_to_gcs_parquet(filtered_df, date_str)
+        # save_to_gcs_parquet(filtered_df, date_str)
 
         # Step 5: Load to BigQuery from parquet
-        save_to_bigquery(spark, "github_events", date_str)
+        save_to_bigquery(spark, "github_events", date_str, filtered_df)
         
         print(f"\n✅ Transformation complete for {date_str}!")
         return True
@@ -241,23 +258,31 @@ def run_transformation(date_str):
         print(f"❌ Failed: {date_str} — {str(e)}")
         return False 
     finally:
-        spark.stop()
+        try:
+            spark.stop()   
+        except Exception:
+            pass
 
 if __name__ == '__main__':
-    start_date = datetime(2025, 1, 11)
-    end_date = datetime(2025, 1, 31)
-    failed_dates = []
+    import sys
+    if len(sys.argv) > 1:
+        date_str = sys.argv[1]
+        run_transformation(date_str)
+    else: 
+        start_date = datetime(2025, 1, 11)
+        end_date = datetime(2025, 1, 31)
+        failed_dates = []
 
-    current_date = start_date
-    while current_date <= end_date:
-        date_str = current_date.strftime("%Y-%m-%d")
-        success = run_transformation(date_str)
-        if not success:
-            failed_dates.append(date_str)
-        current_date += timedelta(days=1)
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime("%Y-%m-%d")
+            success = run_transformation(date_str)
+            if not success:
+                failed_dates.append(date_str)
+            current_date += timedelta(days=1)
 
-    total_dates = (end_date - start_date).days + 1
-    print(f"\n{'='*50}")
-    print(f"✅ Successful: {total_dates - len(failed_dates)}/{total_dates}")
-    if failed_dates:
-        print(f"❌ Failed dates: {failed_dates}")
+        total_dates = (end_date - start_date).days + 1
+        print(f"\n{'='*50}")
+        print(f"✅ Successful: {total_dates - len(failed_dates)}/{total_dates}")
+        if failed_dates:
+            print(f"❌ Failed dates: {failed_dates}")

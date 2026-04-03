@@ -27,7 +27,7 @@ def download_to_gcs(date_str, hour):
 
     try:
         
-        client = storage.Client()
+        client = storage.Client(project=os.getenv('GCP_PROJECT_ID'))
         bucket = client.bucket(GCS_BUCKET)
         blob = bucket.blob(gcs_path)
 
