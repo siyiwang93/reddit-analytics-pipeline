@@ -54,6 +54,7 @@ All steps orchestrated by **Apache Airflow** running in **Docker**.
 - Loads to BigQuery
 
 ### 3. dbt Models
+```
 staging/
 stg_github_events          # light cleaning on raw table
 intermediate/
@@ -68,6 +69,7 @@ github_daily_activity      # daily event counts
 github_repo_summary        # per-repo aggregates
 github_platform_metrics    # DAU, engagement metrics
 github_trending_repos      # trending repos by score
+```
 
 ### 4. Airflow DAG
 
