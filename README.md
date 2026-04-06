@@ -3,6 +3,7 @@
 A production-grade batch data pipeline that ingests, transforms, and visualizes millions of GitHub events using modern data engineering tools.
 
 ## Architecture
+```
 GitHub Archive (source)
 ↓
 Python ingestion → Google Cloud Storage (raw JSON)
@@ -14,11 +15,11 @@ Apache Spark → BigQuery (raw events table)
 dbt (staging → intermediate → marts)
 ↓
 Tableau dashboard
-
+```
 All steps orchestrated by **Apache Airflow** running in **Docker**.
 
 ## Tech Stack
-
+```
 | Layer | Technology |
 |---|---|
 | Ingestion | Python, GHArchive API |
@@ -29,6 +30,7 @@ All steps orchestrated by **Apache Airflow** running in **Docker**.
 | Orchestration | Apache Airflow (Docker) |
 | Visualization | Tableau |
 | Infrastructure | Docker, Google Cloud Platform |
+```
 
 ## Data
 
@@ -94,6 +96,7 @@ Built in Tableau Public connecting directly to BigQuery:
 - Airflow DAG design for batch backfilling
 
 ## Project Structure
+```
 ├── airflow/
 │   ├── dags/
 │   │   └── github_pipeline.py    # Airflow DAG
@@ -106,8 +109,9 @@ Built in Tableau Public connecting directly to BigQuery:
 │   └── spark/
 │       └── transform.py          # PySpark transformation
 └── github_analytics/             # dbt project
-├── models/
-│   ├── staging/
-│   ├── intermediate/
-│   └── marts/
-└── dbt_project.yml
+    ├── models/
+    │   ├── staging/
+    │   ├── intermediate/
+    │   └── marts/
+    └── dbt_project.yml
+```
